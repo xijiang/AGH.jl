@@ -1,5 +1,8 @@
 module AGH
+using LinearAlgebra, SparseArrays, ProgressMeter
 
-greet() = print("Hello World!")
+include("A.jl")
+include("G.jl")
+include("H.jl")
 
 end # module
