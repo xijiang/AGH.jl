@@ -1,11 +1,16 @@
 name = "AGH"
 uuid = "619d5fdb-4fd6-4bbb-94ba-73badd089ae1"
 authors = ["Xijiang Yu <xijiang@users.noreply.github.com>"]
-version = "0.1.1"
+version = "0.1.2"
 
 [deps]
 Distributed = "8ba89e20-285c-5b6f-9357-94700520ee1b"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Mmap = "a63ad114-7e13-5084-954f-fe012c677804"
+Octavian = "6fd5a793-0b7e-452c-907f-f8bfe9c57db4"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 ProgressMeter = "92933f4c-e287-5a05-a399-4b506db050ca"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
