@@ -58,6 +58,8 @@ function update_n_write_lrg(io, g, f, k, z)
             v[i, j] -= z[i] * w[j]
         end
     end
+    @debug "testing" v
+
     write(io, v)
 end
 
@@ -106,16 +108,19 @@ function icdpob(gf, b; s = 1000, tol = 1e-5, tmp = ".", mem::Int64 = 8)
 
     @debug "ToDo: Enough memory (G)?" n*bs*8/1024^3
     @debug "ToDo: starting block not random ?"
-    @debug "ToDo: return Z, piv before last writing"                               
     Z, piv, rest, file = zeros(n, bs), Int[], collect(1:n), gf
     for i in 1:b
         G = mmap(file, Matrix{Float64}, (n, n), 8)
         d = diag(G)
         i == 1 ? p = shuffle(1:n) : p = sortperm(d, rev = true)
+        #p = sortperm(d, rev = true)
         x, y = view(p, 1:s), view(p, s+1:n);    sort!(x);    sort!(y)
-        i > 1 && pivote(Z, i, s, p)
-        l = (i - 1) * s + 1
-        z, g = view(Z, l:n, l:i*s),   view(G, y, y)
+        i > 1 && pivote_pz!(Z, i, s, p)
+        z, g = begin
+            l, r = (i - 1) * s + 1, size(Z)[1]
+            view(Z, l:r, l:i*s),   view(G, y, y)
+        end
+        @debug "testing" g
         copyto!(z, G[p, x]) # columns to z
         append!(piv, rest[x]);  rest = rest[y]
         info = update_z!(z, tol)
@@ -124,9 +129,9 @@ function icdpob(gf, b; s = 1000, tol = 1e-5, tmp = ".", mem::Int64 = 8)
         # update g by blocks and write to tmp/tmpfile
         tf = tempname(tmp)
         n -= s
-        #i == b && return Z, piv
+        i == b && return Z, piv
         open(tf, "w") do io
-            write(tf, n)
+            write(io, n)
             cs = cslrg(n, mem)   # number of g columns to deal a time
             f = 1
             for k in cs
@@ -137,5 +142,4 @@ function icdpob(gf, b; s = 1000, tol = 1e-5, tmp = ".", mem::Int64 = 8)
         i > 2 && rm(file)
         file = tf
     end
-    Z, piv
 end

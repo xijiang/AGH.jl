@@ -85,11 +85,12 @@ function pivoted_cholesky_decomposition!(A; tol = 1e-5)
     issymmetric(A) || error("Not a symmetric matrix")
     n = size(A)[1]              # dimension
     p = collect(1:n)            # pivote
-    for i in 1:n
+    #for i in 1:n
+    for i in 1:1
         d = diag(A)[p[i:end]]   # diagonals
         l = argmax(d) + i - 1
         p[i], p[l] = p[l], p[i] # swap
-        A[p[i], p[i]] < tol && (return A[p, p], p, i-1)
+        A[p[i], p[i]] < tol && return A[p, p], p, i-1
         A[p[i], p[i]] = sqrt(A[p[i], p[i]])
         r = p[i+1:n]
         A[r, p[i]] ./= A[p[i], p[i]]
