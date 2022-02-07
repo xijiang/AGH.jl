@@ -7,7 +7,7 @@ module PICD
 using Mmap, Statistics, Octavian, LinearAlgebra, Random
 
 include("genotype.jl")
-include("picd.jl")
+include("cholesky-decomposition.jl")
 include("icdpob.jl")
 include("core-set.jl")
 
