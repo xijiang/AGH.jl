@@ -27,7 +27,7 @@ function gheader(gt; target="GBLUP")
 end
 
 """
-    function pack_G(src, out; g_majored = true, skip = 0)
+    function pack_G(src, out; g_majored = true, skip = 0, gc = 2)
 Pack the genotypes in `src` into the packed genotype format.
 
 ## Source file
@@ -57,17 +57,23 @@ binary file that stores 1 4 2 5 3 6, consecutively of `Int64`.
 
 If to read a line and write a line later, and also take the advantage of
 sequential I/O, this must be considered very carefully.
+
+## Plink raw file
+One can convert a plink raw file as below:
+
+`pack_G(raw, out, skip = 1, gc = 7)`
 """
-function pack_G(src, out; g_majored = true, skip = 0)
+function pack_G(src, out; g_majored = true, skip = 0, gc = 2)
     m, n, gdm = 0, 0, zeros(Int64, 3)
     open(out, "w") do io
         write(io, gdm)
         open(src, "r") do gf
             [readline(gf) for _ in 1:skip];
-            for line in eachline(src) # OBS!, this will transpose the matrix
+            for line in eachline(gf) # OBS!, this will transpose the matrix
                 line[1] == '#' && continue
-                s = parse.(Int8, split(line)[2:end])
+                s = parse.(Int8, split(line)[gc:end])
                 n += 1          # number of lines
+
                 m += length(s)  # number of columns
                 write(io, s)
             end
@@ -75,8 +81,9 @@ function pack_G(src, out; g_majored = true, skip = 0)
     end            # genotypes written
     # A simple check point to see if the file is right.
     (m % n == 0) || @error "Genotypes not rectanglar"
+    @debug "Dimensions" m÷n n
     open(out, "r+") do io
-        gdm = mmap(io, Vector{Int64}, 3)
+        gdm = Mmap.mmap(io, Vector{Int64}, 3)
         gdm[1], gdm[2], gdm[3] = g_majored, m/n, n # auto to Int64
         Mmap.sync!(gdm)
     end
@@ -94,7 +101,7 @@ function transpose_G(src, out)
             read!(fin, header)
             header[1] = header[1] == 1 ? 0 : 1
             write(foo, header[1], header[3], header[2])
-            gt = mmap(fin, Matrix{Int8}, Tuple(header[2:3]), 24)
+            gt = Mmap.mmap(fin, Matrix{Int8}, Tuple(header[2:3]), 24)
             write(foo, gt')
         end
     end
@@ -115,7 +122,7 @@ function mat_W(pg, twop, foo)
     else
         dms[2] == length(twop) || error("wrong twop")
     end
-    gt = mmap(pg, Matrix{Int8}, dms, goffset)
+    gt = Mmap.mmap(pg, Matrix{Int8}, dms, goffset)
     open(foo, "w") do io
         w = zeros(dms[1])
         header = zeros(Int64, 3)
@@ -146,8 +153,9 @@ function vr1_G(W, twop, G; step = 1000) # note: step is on ID for GBLUP
     s2pq = 1. / (1 .- .5twop)'twop
     locus_majored, dms = gheader(W) # read locus_majored.
     nlc, nid = dms
-    w = mmap(W, Matrix{Float64}, dms, goffset)
+    w = Mmap.mmap(W, Matrix{Float64}, dms, goffset)
     blk = zeros(nid, step)      # step rows of GBLUP G a time
+    #xw, yw = zeros(nid, step), zeros(nid, step)
     steps = collect(step:step:nid)
     nid % step == 0 || push!(steps, nid)
     open(G, "w") do io
@@ -168,3 +176,57 @@ function vr1_G(W, twop, G; step = 1000) # note: step is on ID for GBLUP
         end
     end
 end
+
+"""
+    function part_G(pg, ids, twop)
+Calculate a sub-matrix of **G** according ID list `ids` on the fly.
+"""
+function part_G(pg, ids, twop)
+    c, s = cstwop(twop)
+    n = length(ids)
+    g = zeros(n, n)
+    _, dms = gheader(pg)
+    gt = Mmap.mmap(pg, Matrix{Int8}, dms, 24)
+    t = view(gt, :, ids)
+    matmul!(g, t', t)
+    g2p = t'twop
+    for i in 1:n
+        Threads.@threads for j in 1:i
+            g[i, j] = (g[i, j] - g2p[i] - g2p[j] + s) / c
+        end
+    end
+    g
+end
+
+"""
+    function diag_pg(pg, twop)
+Calculate the diagonals of **G** with packed genotype `pg`, and `2p` info.
+"""
+function diag_pg(pg, twop)
+    c, s = cstwop(twop)
+    _, (nlc, nid) = gheader(pg)
+    d = zeros(nid)
+    g = Mmap.mmap(pg, Matrix{Int8}, (nlc, nid), 24)
+    x = zeros(1)
+    Threads.@threads for i in 1:nid
+        t = g[:, i]'twop
+        matmul!(x, g[:, i]', g[:, i])
+        d[i] = (x[1] - 2t + s) / c
+    end
+    d
+end
+
+"""
+    function cstwop(twop)
+Return the inner productions of
+- `2p'q`, and 
+- `4p'p`
+
+These two numbers are to separate normalization and 0, 1, and 2 gentoypes.
+"""
+function cstwop(twop)
+    c = (1 .- .5twop)'twop
+    s = twop'twop
+    c, s
+end
+
