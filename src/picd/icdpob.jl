@@ -145,61 +145,54 @@ function icdpob_old(gf, b; s = 1000, tol = 1e-5, tmp = ".", ram::Int64 = 8)
 end
 
 """
-    function icdpob(gf, nc; tol = 1e-5, tmp = ".", mem = 16)
-This function uses 16GiB memory for a block of a huge G matrix, which can't be 
+    function _sample(s, n, ele)
+Sample `n` element from Set `s`.  Element `ele` must be included.
+"""
+function _sample(s, n, ele)
+    v = collect(s)
+    r = sample(v, n, replace=false, ordered=true)
+    findnext(x -> x == ele, r, 1) == nothing && (r[1] = ele)
+    sort(r)
+end
+
+function _shrink(a, b)
+    while a > b
+        a ÷= 2
+    end
+    a
+end
+
+"""
+    function icdpob(pg, nc; tol = 1e-5)
+This function uses 8GiB memory for a block of a huge G matrix, which can't be 
 fit in memory.  The first block was randomly sampled.  After Cholesky 
 decomposition of this block, an analysis was done to decide how to proceed to 
 have `nc` core animals.
 """
-function icdpob(gf, nc; tol = 1e-5, tmp = ".", mem = 8)
-    n = readInt64(gf)           # dimension, first 8 bytes of G
-    @debug n
-    nc > n && error("Too many core animals were asked")
-    m = Int(floor(sqrt(mem * 1024^3 / 8))) # max dimension with
-    #=
-    Z, piv, rest, file = zeros(n, bs), Int[], collect(1:n), gf
-    for i in 1:b
-        G = mmap(file, Matrix{Float64}, (n, n), 8)
-        d = diag(G)
-        i == 1 ? p = shuffle(1:n) : p = sortperm(d, rev = true)
-        #p = sortperm(d, rev = true)
-        x, y = view(p, 1:s), view(p, s+1:n);    sort!(x);    sort!(y)
-        i > 1 && pivote_pz!(Z, i, s, p)
-        z, g = begin
-            l, r = (i - 1) * s + 1, size(Z)[1]
-            view(Z, l:r, l:i*s),   view(G, y, y)
-        end
-        @debug "testing" g
-        copyto!(z, G[p, x]) # columns to z
-        append!(piv, rest[x]);  rest = rest[y]
-        info = update_z!(z, tol)
-        l = (i - 1) * s + info
-        info > 0 && return Z[:, 1:l], piv[1:l]
-        # update g by blocks and write to tmp/tmpfile
-        tf = tempname(tmp)
-        n -= s
-        i == b && return Z, piv
-        open(tf, "w") do io
-            write(io, n)
-            cs = cslrg(n, ram)   # number of g columns to deal a time
-            f = 1
-            for k in cs
-                update_n_write_lrg(io, g, f, k, z[s+1:end, s])
-                f = k + 1
-            end
-        end
-        i > 2 && rm(file)
-        file = tf
+function icdpob(pg, twop, nc; tol = 1e-5)
+    _, (nlc, nid) = gheader(pg) # dimension, first 8 bytes of G
+    @debug "dims" nlc, nid
+    ids = Set(1:nid)                      # all are candidates
+    nrm = Int(floor(nc * (nid - nc)/nid)) # number to be removed
+    nrm = _shrink(nrm, nid-nc)
+    while nrm > nid - nc
+        nrm ÷= 2
+    end                         # make sure to have enough nc
+    d = diag_pg(pg, twop)
+    x = findmax(d)[2]           # the ID must be included
+    while nrm > 0
+        sub = _sample(ids, nc, x)
+        sg = part_G(pg, sub, twop)
+    #    _, piv, rk, info = LAPACK.pstrf!('L', sg, tol)
+    #    ids = setdiff(ids, sub[piv[end-nrm:end]])
+        #nrm = _shrink(nrm, length(ids) - nc))
+        nrm ÷= 2
     end
-    =#
+    sort(collect(ids))
 end
 
-function teaser(gf, nc; tol = 1e-5)
-    n = readInt64(gf)
-    G = mmap(gf, Matrix{Float64}, (n, n), 8)
-    x = sort(randperm(n)[1:nc])
-    g = zeros(nc, nc)
-    copyto!(g, G[x, x])
-    _, piv, rk, info = LAPACK.pstrf!('L', g, tol)
-    diag(g), piv
+function teaser(gf)
+    _, dms = gheader(gf)
+    gt = mmap(gf, Matrix{Int8}, dms, 24)
+    mean(gt, dims = 2)
 end

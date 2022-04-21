@@ -4,7 +4,8 @@
 The module that does `p`ivoted `i`ncomplete `C`holesky `d`ecomposition(PICD).
 """
 module PICD
-using Statistics, Octavian, LinearAlgebra, Random, Mmap
+using Statistics, Octavian, LinearAlgebra, Random, StatsBase
+import Mmap: mmap
 
 include("genotype.jl")
 include("cholesky-decomposition.jl")

@@ -83,9 +83,9 @@ function pack_G(src, out; g_majored = true, skip = 0, gc = 2)
     (m % n == 0) || @error "Genotypes not rectanglar"
     @debug "Dimensions" m÷n n
     open(out, "r+") do io
-        gdm = Mmap.mmap(io, Vector{Int64}, 3)
+        gdm = mmap(io, Vector{Int64}, 3)
         gdm[1], gdm[2], gdm[3] = g_majored, m/n, n # auto to Int64
-        Mmap.sync!(gdm)
+        sync!(gdm)
     end
 end
 
@@ -101,7 +101,7 @@ function transpose_G(src, out)
             read!(fin, header)
             header[1] = header[1] == 1 ? 0 : 1
             write(foo, header[1], header[3], header[2])
-            gt = Mmap.mmap(fin, Matrix{Int8}, Tuple(header[2:3]), 24)
+            gt = mmap(fin, Matrix{Int8}, Tuple(header[2:3]), 24)
             write(foo, gt')
         end
     end
@@ -122,7 +122,7 @@ function mat_W(pg, twop, foo)
     else
         dms[2] == length(twop) || error("wrong twop")
     end
-    gt = Mmap.mmap(pg, Matrix{Int8}, dms, goffset)
+    gt = mmap(pg, Matrix{Int8}, dms, goffset)
     open(foo, "w") do io
         w = zeros(dms[1])
         header = zeros(Int64, 3)
@@ -153,7 +153,7 @@ function vr1_G(W, twop, G; step = 1000) # note: step is on ID for GBLUP
     s2pq = 1. / (1 .- .5twop)'twop
     locus_majored, dms = gheader(W) # read locus_majored.
     nlc, nid = dms
-    w = Mmap.mmap(W, Matrix{Float64}, dms, goffset)
+    w = mmap(W, Matrix{Float64}, dms, goffset)
     blk = zeros(nid, step)      # step rows of GBLUP G a time
     #xw, yw = zeros(nid, step), zeros(nid, step)
     steps = collect(step:step:nid)
@@ -186,32 +186,34 @@ function part_G(pg, ids, twop)
     n = length(ids)
     g = zeros(n, n)
     _, dms = gheader(pg)
-    gt = Mmap.mmap(pg, Matrix{Int8}, dms, 24)
-    t = view(gt, :, ids)
+    gt = mmap(pg, Matrix{Int8}, dms, 24)
+    t = zeros(Int8, dms)
+    copyto!(t, view(gt, :, ids))
     matmul!(g, t', t)
     g2p = t'twop
     for i in 1:n
         Threads.@threads for j in 1:i
             g[i, j] = (g[i, j] - g2p[i] - g2p[j] + s) / c
+            g[j, i] = g[i, j]
         end
     end
     g
 end
 
 """
-    function diag_pg(pg, twop)
-Calculate the diagonals of **G** with packed genotype `pg`, and `2p` info.
-"""
+        function diag_pg(pg, twop)
+    Calculate the diagonals of **G** with packed genotype `pg`, and `2p` info.
+    """
 function diag_pg(pg, twop)
     c, s = cstwop(twop)
     _, (nlc, nid) = gheader(pg)
     d = zeros(nid)
-    g = Mmap.mmap(pg, Matrix{Int8}, (nlc, nid), 24)
+    g = mmap(pg, Matrix{Int8}, (nlc, nid), 24)
     x = zeros(1)
     Threads.@threads for i in 1:nid
-        t = g[:, i]'twop
-        matmul!(x, g[:, i]', g[:, i])
-        d[i] = (x[1] - 2t + s) / c
+    t = g[:, i]'twop
+    matmul!(x, g[:, i]', g[:, i])
+    d[i] = (x[1] - 2t[1] + s) / c
     end
     d
 end
@@ -227,6 +229,6 @@ These two numbers are to separate normalization and 0, 1, and 2 gentoypes.
 function cstwop(twop)
     c = (1 .- .5twop)'twop
     s = twop'twop
-    c, s
+    c[1], s[1]
 end
 

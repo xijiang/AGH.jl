@@ -5,6 +5,7 @@ using LinearAlgebra, SparseArrays, ProgressMeter, Statistics, LinearAlgebra,
 include("A.jl")
 include("G.jl")
 include("H.jl")
+include("misc.jl")
 include("file-io.jl")
 include("one-step.jl")
 include("picd/PICD.jl")
